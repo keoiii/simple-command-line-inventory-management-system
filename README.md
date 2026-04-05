@@ -1,1 +1,1 @@
-# im-deletieng-this-when-i-remember
+really really simple command-line inventory management system
