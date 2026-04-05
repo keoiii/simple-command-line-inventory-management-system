@@ -1,0 +1,203 @@
+#to save files locally ,
+import json, os
+from datetime import datetime, timedelta
+DB_FILE = "inventory.json"
+def load():
+   if os.path.exists(DB_FILE):
+       with open(DB_FILE) as f:
+           return json.load(f)
+   return {"items": {}, "transactions": []}
+
+
+def save(db):
+   with open(DB_FILE, "w") as f:
+       json.dump(db, f, indent=2)
+
+
+def today():
+   return datetime.now().strftime("%Y-%m-%d")
+
+
+def now_time():
+   return datetime.now().strftime("%H:%M")
+
+
+def rp(n):
+   return f"Rp {int(n):,}".replace(",", ".")
+
+
+def line(w=56):
+   print("─" * w)
+
+
+def clear():
+   os.system("cls" if os.name == "nt" else "clear")
+#sell
+
+
+def sell(db):
+   clear()
+   print("SELL / USE ITEM\n")
+
+
+   if not db["items"]:
+       print("No items in inventory. Add items first.")
+       input("\nEnter to continue...")
+       return
+
+
+   name = input("Item name: ").strip()
+   item = db["items"].get(name)
+   if not item:
+       print(f"  '{name}' not found.")
+       input("\nEnter to continue...")
+       return
+   print(f"  Stock: {item['qty']}  |  Cost: {rp(item['cost'])}  |  Sell: {rp(item['sell'])}")
+   try:
+       qty = int(input("Qty [1]: ") or "1")
+       price_in = input(f"Sale price/unit [{rp(item['sell'])}]: ").strip()
+       price = float(price_in) if price_in else item["sell"]
+   except ValueError:
+       print("  Invalid input.")
+       input("\nEnter to continue...")
+       return
+   if item["qty"] < 1:
+       print(f"  Only {item['qty']} in stock.")
+       input("\nEnter to continue...")
+       return
+   profit = (price - item["cost"]) * qty
+   margin = (profit / (price * qty) * 100) if price > 0 else 0
+   print(f"\n  Revenue : {rp(price * qty)}")
+   print(f"  Profit  : {rp(profit)}")
+   print(f"  Margin  : {margin:.1f}%")
+   if input("\nConfirm? [Y/n]: ").strip().lower() in ("n", "no"):
+       return
+   item["qty"] -= qty
+   db["transactions"].append({
+       "date": today(), "time": now_time(),
+       "item": name, "qty": qty,
+       "sell_price": price, "cost": item["cost"], "profit": profit
+   })
+   save(db)
+   print(f"  Done — {qty} x {name} recorded.")
+   input("\nEnter to continue...")
+#storage
+def show_stock(db):
+   clear()
+   print("STORAGE LIST\n")
+   items = db["items"]
+   if not items:
+       print("  No items.")
+       input("\nEnter to continue...")
+       return
+   q = input("Search (blank = all): ").strip().lower()
+   found = {k: v for k, v in items.items() if not q or q in k.lower()}
+   print()
+   print(f"  {'ITEM':<28} {'QTY':>5}  {'COST':>12}  {'SELL':>12}  STATUS")
+   line()
+   for name, it in sorted(found.items()):
+       if it["qty"] == 0:
+           status = "OUT"
+       elif it["qty"] <= it.get("alert", 5):
+           status = "LOW"
+       else:
+           status = "ok"
+       print(f"  {name:<28} {it['qty']:>5}  {rp(it['cost']):>12}  {rp(it['sell']):>12}  {status}")
+   line()
+   print(f"  {len(found)} items")
+   input("\nEnter to continue...")
+#sales log
+def show_log(db):
+   clear() #transactions
+   print("TODAY'S SALES LOG\n")
+   txs = [t for t in db["transactions"] if t["date"] == today()]
+   if not txs:
+       print("  No sales today.")
+       input("\nEnter to continue...")
+       return
+   print(f"  {'TIME':<6}  {'ITEM':<26}  {'QTY':>4}  {'REVENUE':>12}  {'PROFIT':>12}  {'MARGIN':>7}")
+   line(76)
+   for t in reversed(txs):
+       rev = t["sell_price"] * t["qty"]
+       m = (t["profit"] / rev * 100) if rev > 0 else 0
+       print(f"  {t['time']:<6}  {t['item']:<26}  {t['qty']:>4}  {rp(rev):>12}  {rp(t['profit']):>12}  {m:>6.1f}%")
+   line(76)
+
+
+   total_rev = sum(t["sell_price"] * t["qty"] for t in txs) #total profit, revenue, and margin in %
+   total_profit = sum(t["profit"] for t in txs)
+   total_margin = (total_profit / total_rev * 100) if total_rev > 0 else 0
+   print(f"  {'TOTAL':<34}  {rp(total_rev):>12}  {rp(total_profit):>12}  {total_margin:>6.1f}%")
+   input("\nEnter to continue...")
+#14-day profit report + idk how to code this
+#im to lazy to code this
+#Add / restock
+def add_item(db):
+   clear()
+   print("ADD / RESTOCK ITEM\n")
+   name = input("Item name: ").strip()
+   if not name:#check for existing items
+       return
+   existing = db["items"].get(name)
+   if existing:
+       print(f"  '{name}' exists. Stock: {existing['qty']}")
+       try:
+           qty = int(input("Qty to add: "))
+       except ValueError:
+           return
+       existing["qty"] += qty
+       save(db)
+       print(f"  Restocked. New stock: {existing['qty']}")
+       input("\nEnter to continue...")
+       return
+   try:
+       qty   = int(input("Initial qty: ") or "0")
+       cost  = float(input("Cost/unit: ") or "0")
+       sell  = float(input("Sell/unit: ") or "0")
+       alert = int(input("Low-stock alert at [5]: ") or "5")
+   except ValueError:
+       print("  Invalid input.")
+       input("\nEnter to continue...")
+       return
+   db["items"][name] = {"qty": qty, "cost": cost, "sell": sell, "alert": alert}
+   save(db)
+   print(f"  Added '{name}'.")
+   input("\nEnter to continue...")
+#main code and gui
+def main():
+   db = load()
+   while True:
+       clear()
+       txs_today = [t for t in db["transactions"] if t["date"] == today()]
+       rev = sum(t["sell_price"] * t["qty"] for t in txs_today)
+       profit = sum(t["profit"] for t in txs_today)
+       margin = (profit / rev * 100) if rev > 0 else 0
+       low = [n for n, i in db["items"].items() if 0 < i["qty"] <= i.get("alert", 5)]
+
+
+       print("INVENTORY MANAGER")
+       line()
+       print(f"  Today  Revenue: {rp(rev)}  |  Profit: {rp(profit)}  |  Margin: {margin:.1f}%")
+       print(f"  Items: {len(db['items'])} SKUs  |  Units in stock: {sum(i['qty'] for i in db['items'].values())}")
+       if low:
+           print(f"  LOW STOCK: {', '.join(low[:5])}{'...' if len(low) > 5 else ''}")
+       line()
+       print()
+       print("  1. Sell / use item")
+       print("  2. Storage list")
+       print("  3. Today's sales log")
+       print("  4. Add / restock item")
+       print("  0. Exit")
+       print()
+
+
+       c = input("  Choice: ").strip()
+       if   c == "1": sell(db)
+       elif c == "2": show_stock(db)
+       elif c == "3": show_log(db)
+       elif c == "4": add_item(db)
+       elif c == "0": print("\n  Bye!\n"); break
+
+
+if __name__ == "__main__":
+   main()
